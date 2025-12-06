@@ -135,6 +135,7 @@ class MLLeadScorer:
         confidence = abs(score - 0.5) * 2
         
         # SHAP explanation
+        top_factors = []
         try:
             explainer = shap.TreeExplainer(self.model)
             shap_values = explainer.shap_values(feature_array)
@@ -143,7 +144,8 @@ class MLLeadScorer:
             top_factors = self._get_top_factors(shap_values[0], features_dict)
         except Exception as e:
             print(f"SHAP error: {e}")
-            top_factors = []
+            # Fallback: generate rule-based explanations from feature values
+            top_factors = self._get_feature_based_factors(features_dict)
         
         return {
             "score": float(score),
@@ -162,6 +164,40 @@ class MLLeadScorer:
                 "name": self._humanize(feature_name),
                 "impact": float(shap_values[i]),
                 "value": features_dict[feature_name]
+            })
+        
+        factors.sort(key=lambda x: abs(x["impact"]), reverse=True)
+        return factors[:5]
+    
+    def _get_feature_based_factors(self, features_dict: Dict) -> List[Dict]:
+        """Generate explanation factors from feature values when SHAP fails"""
+        factors = []
+        
+        # Define feature weights for importance (rough importance order)
+        feature_weights = {
+            "keyword_match_score": 0.20,
+            "industry_relevance": 0.18,
+            "contact_completeness": 0.15,
+            "pain_point_match": 0.12,
+            "email_available": 0.10,
+            "tech_stack_count": 0.08,
+            "has_funding_mention": 0.05,
+            "linkedin_available": 0.04,
+            "has_https": 0.03,
+            "description_length_log": 0.03,
+            "company_size_log": 0.02
+        }
+        
+        for feature_name in self.feature_names:
+            value = features_dict.get(feature_name, 0)
+            weight = feature_weights.get(feature_name, 0.05)
+            # Impact = value * weight (positive if value > 0.5, negative otherwise)
+            impact = value * weight if value > 0 else -weight * 0.5
+            
+            factors.append({
+                "name": self._humanize(feature_name),
+                "impact": float(impact),
+                "value": float(value) if isinstance(value, (int, float)) else 0.0
             })
         
         factors.sort(key=lambda x: abs(x["impact"]), reverse=True)

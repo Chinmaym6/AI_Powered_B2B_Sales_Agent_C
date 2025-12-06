@@ -7,7 +7,7 @@ from datetime import datetime
 from ...core.agent import AutonomousAgent
 from ...models.database import get_db, SessionLocal
 from ...models.tables import Campaign, Lead, Email
-from ...models.schemas import CampaignCreate, CampaignResponse, LeadResponse
+from ...models.schemas import CampaignCreate, CampaignUpdate, CampaignResponse, LeadResponse
 
 router = APIRouter(tags=["campaigns"])
 
@@ -153,6 +153,98 @@ async def stop_campaign(campaign_id: str, db: Session = Depends(get_db)):
     
     return {"status": "stopped"}
 
+@router.put("/{campaign_id}")
+async def update_campaign(
+    campaign_id: str,
+    campaign_update: CampaignUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update campaign inputs (name, product_description, target_industry, etc.)"""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    # Update only provided fields
+    update_data = campaign_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        if value is not None:
+            setattr(campaign, field, value)
+    
+    db.commit()
+    db.refresh(campaign)
+    
+    return {
+        "id": str(campaign.id),
+        "name": campaign.name,
+        "product_description": campaign.product_description,
+        "target_industry": campaign.target_industry,
+        "company_size": campaign.company_size,
+        "target_regions": campaign.target_regions,
+        "status": campaign.status,
+        "message": "Campaign updated successfully"
+    }
+
+@router.post("/{campaign_id}/rerun")
+async def rerun_campaign(campaign_id: str, db: Session = Depends(get_db)):
+    """
+    Rerun a campaign: Delete old leads/emails and start fresh.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    # Check if campaign is currently running
+    if campaign_id in manager.running_campaigns:
+        raise HTTPException(status_code=400, detail="Campaign is already running")
+    
+    # Delete old emails first (due to foreign key constraint)
+    old_leads = db.query(Lead).filter(Lead.campaign_id == campaign_id).all()
+    for lead in old_leads:
+        db.query(Email).filter(Email.lead_id == lead.id).delete()
+    
+    # Delete old leads
+    db.query(Lead).filter(Lead.campaign_id == campaign_id).delete()
+    
+    # Reset campaign status to trigger new run
+    campaign.status = "pending"
+    campaign.execution_state = "idle"
+    campaign.current_step = None
+    campaign.progress_percentage = 0
+    campaign.leads_processed = 0
+    campaign.leads_total = 0
+    campaign.error_message = None
+    campaign.can_resume = True
+    campaign.product_analysis = None  # Reset product analysis for fresh run
+    
+    db.commit()
+    
+    return {
+        "id": str(campaign.id),
+        "name": campaign.name,
+        "status": "pending",
+        "message": "Campaign cleared and ready to rerun. All old leads and emails deleted."
+    }
+
+@router.get("/{campaign_id}/inputs")
+async def get_campaign_inputs(campaign_id: str, db: Session = Depends(get_db)):
+    """Get campaign input details for editing"""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    return {
+        "id": str(campaign.id),
+        "name": campaign.name,
+        "product_name": getattr(campaign, 'product_name', '') or '',
+        "product_description": campaign.product_description,
+        "target_industry": campaign.target_industry or '',
+        "target_audience": getattr(campaign, 'target_audience', '') or '',
+        "company_size": campaign.company_size or '',
+        "target_regions": campaign.target_regions or [],
+        "status": campaign.status,
+        "created_at": campaign.created_at.isoformat() if campaign.created_at else None
+    }
+
 @router.delete("/{campaign_id}")
 async def delete_campaign(campaign_id: str, db: Session = Depends(get_db)):
     """Delete a campaign and all associated data"""
@@ -234,6 +326,28 @@ async def campaign_live_feed(
         print(f"WebSocket error: {e}")
         manager.disconnect(campaign_id, websocket)
 
+
+@router.get("/{campaign_id}/status")
+async def get_campaign_status(campaign_id: str, db: Session = Depends(get_db)):
+    """Get current campaign execution status and progress"""
+    
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    return {
+        "campaign_id": str(campaign.id),
+        "execution_state": campaign.execution_state or "idle",
+        "current_step": campaign.current_step,
+        "progress_percentage": campaign.progress_percentage or 0,
+        "leads_processed": campaign.leads_processed or 0,
+        "leads_total": campaign.leads_total or 0,
+        "last_activity_at": campaign.last_activity_at.isoformat() if campaign.last_activity_at else None,
+        "error_message": campaign.error_message,
+        "can_resume": campaign.can_resume,
+        "is_running": campaign_id in manager.running_campaigns
+    }
+
 @router.get("/{campaign_id}")
 async def get_campaign(campaign_id: str, db: Session = Depends(get_db)):
     """Get campaign details and stats"""
@@ -312,6 +426,9 @@ async def get_campaign(campaign_id: str, db: Session = Depends(get_db)):
             "id": str(campaign.id),
             "name": campaign.name,
             "status": campaign.status,
+            "execution_state": campaign.execution_state or "idle",
+            "current_step": campaign.current_step,
+            "progress_percentage": campaign.progress_percentage or 0,
             "created_at": campaign.created_at.isoformat() if campaign.created_at else None
         },
         "stats": stats,

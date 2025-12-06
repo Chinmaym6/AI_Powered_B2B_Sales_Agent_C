@@ -11,14 +11,26 @@ class Campaign(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
+    product_name = Column(String, nullable=True)
     product_description = Column(Text, nullable=False)
     target_industry = Column(String)
+    target_audience = Column(String, nullable=True)
     company_size = Column(String)
     target_regions = Column(ARRAY(String))
     status = Column(String, default="active")
     product_analysis = Column(JSONB)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Campaign execution state (for persistence)
+    execution_state = Column(String, default="idle")  # idle/running/paused/completed/failed
+    current_step = Column(String, nullable=True)  # analyze/search/enrich/score/email
+    progress_percentage = Column(Integer, default=0)  # 0-100
+    leads_processed = Column(Integer, default=0)
+    leads_total = Column(Integer, default=0)
+    last_activity_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    can_resume = Column(Boolean, default=True)
 
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -64,6 +76,16 @@ class Lead(Base):
     # description_embedding = Column(Vector(384))
     description_embedding = Column(ARRAY(Float))
     
+    # Auto-learning fields for ML improvement
+    actual_outcome = Column(Integer, nullable=True)  # 1=good lead, 0=bad lead, None=unknown
+    reply_received = Column(Boolean, default=False)
+    reply_sentiment = Column(String, nullable=True)  # positive/negative/neutral
+    reply_confidence = Column(Float, nullable=True)  # 0.0-1.0
+    reply_intent = Column(String, nullable=True)  # interested_demo/not_interested/etc.
+    replied_at = Column(DateTime(timezone=True), nullable=True)
+    needs_manual_review = Column(Boolean, default=False)
+    auto_labeled = Column(Boolean, default=False)  # True if AI auto-labeled the outcome
+    
     status = Column(String, default="new")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -86,6 +108,9 @@ class Email(Base):
     reply_text = Column(Text)
     reply_sentiment = Column(String)
     reply_intent = Column(String)
+    reply_confidence = Column(Float, nullable=True)  # Sentiment confidence 0-1
+    processed_for_sentiment = Column(Boolean, default=False)  # Track if analyzed
+    message_id = Column(String, nullable=True)  # For email threading
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     lead = relationship("Lead", back_populates="emails")

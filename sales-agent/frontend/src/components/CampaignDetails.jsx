@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Activity, Users, Mail, MessageSquare, Star, ArrowLeft, X, Globe, Linkedin, User } from 'lucide-react';
+import { Activity, Users, Mail, MessageSquare, Star, ArrowLeft, X, Globe, Linkedin, User, Edit3, RotateCcw, Save } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import MLScoreExplanation from './MLScoreExplanation';
 
 export default function CampaignDetails() {
     const { campaignId } = useParams();
@@ -13,36 +14,81 @@ export default function CampaignDetails() {
     const [emailLogs, setEmailLogs] = useState([]);
     const [selectedLead, setSelectedLead] = useState(null);
 
+    // Edit Campaign State
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editForm, setEditForm] = useState({
+        name: '',
+        product_name: '',
+        product_description: '',
+        target_industry: '',
+        target_audience: ''
+    });
+    const [saving, setSaving] = useState(false);
+    const [rerunning, setRerunning] = useState(false);
+
     useEffect(() => {
         fetchDashboardData();
         const websocket = new WebSocket(`ws://localhost:8000/api/campaigns/${campaignId}/live`);
 
         websocket.onmessage = (event) => {
-            const update = JSON.parse(event.data);
-            setLogs(prev => [...prev, {
-                timestamp: new Date().toLocaleTimeString(),
-                message: update.message,
-                type: update.type
-            }]);
+            try {
+                const update = JSON.parse(event.data);
+                const msg = update.message || '';
 
-            // Refresh data on major updates
-            const msg = update.message;
-            if (
-                msg.includes("complete") ||
-                msg.includes("Sent") ||
-                msg.includes("Saved") ||
-                msg.includes("Score") ||
-                msg.includes("Email sent") ||
-                msg.includes("stopped")
-            ) {
-                fetchDashboardData();
+                // Only add to logs if there's a message
+                if (msg) {
+                    setLogs(prev => [...prev, {
+                        timestamp: new Date().toLocaleTimeString(),
+                        message: msg,
+                        type: update.type
+                    }]);
+                }
+
+                // Refresh data on any significant update
+                const shouldRefresh =
+                    update.type === 'complete' ||
+                    update.type === 'error' ||
+                    msg.includes("complete") ||
+                    msg.includes("Complete") ||
+                    msg.includes("Sent") ||
+                    msg.includes("sent") ||
+                    msg.includes("Saved") ||
+                    msg.includes("Score") ||
+                    msg.includes("Email") ||
+                    msg.includes("stopped") ||
+                    msg.includes("Enriched") ||
+                    msg.includes("leads") ||
+                    msg.includes("Leads") ||
+                    msg.includes("🎉") ||
+                    msg.includes("✅") ||
+                    msg.includes("📧") ||
+                    msg.includes("💎") ||
+                    msg.includes("✨");
+
+                if (shouldRefresh) {
+                    fetchDashboardData();
+                }
+            } catch (e) {
+                console.error('WebSocket message parse error:', e);
             }
+        };
+
+        // Also refresh on WebSocket close (campaign might have completed)
+        websocket.onclose = () => {
+            console.log('WebSocket closed, refreshing data...');
+            fetchDashboardData();
         };
 
         setWs(websocket);
 
+        // Auto-refresh every 5 seconds while page is open
+        const refreshInterval = setInterval(() => {
+            fetchDashboardData();
+        }, 5000);
+
         return () => {
             websocket.close();
+            clearInterval(refreshInterval);
         };
     }, [campaignId]);
 
@@ -94,6 +140,82 @@ export default function CampaignDetails() {
         }
     };
 
+    // Open edit modal and fetch current campaign inputs
+    const openEditModal = async () => {
+        try {
+            const response = await fetch(`http://127.0.0.1:8000/api/campaigns/${campaignId}/inputs`);
+            if (response.ok) {
+                const inputs = await response.json();
+                setEditForm({
+                    name: inputs.name || '',
+                    product_name: inputs.product_name || '',
+                    product_description: inputs.product_description || '',
+                    target_industry: inputs.target_industry || '',
+                    target_audience: inputs.target_audience || ''
+                });
+                setShowEditModal(true);
+            }
+        } catch (error) {
+            console.error('Error fetching campaign inputs:', error);
+        }
+    };
+
+    // Save edited campaign
+    const handleSaveEdit = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+
+        try {
+            const response = await fetch(`http://127.0.0.1:8000/api/campaigns/${campaignId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editForm)
+            });
+
+            if (response.ok) {
+                setShowEditModal(false);
+                fetchDashboardData(); // Refresh data
+            } else {
+                console.error('Failed to update campaign');
+            }
+        } catch (error) {
+            console.error('Error updating campaign:', error);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // Rerun campaign
+    const handleRerunCampaign = async () => {
+        if (!window.confirm('Are you sure you want to rerun this campaign? This will start a new execution with the current settings.')) {
+            return;
+        }
+
+        setRerunning(true);
+
+        try {
+            const response = await fetch(`http://127.0.0.1:8000/api/campaigns/${campaignId}/rerun`, {
+                method: 'POST'
+            });
+
+            if (response.ok) {
+                // Close existing WebSocket and reload page to establish new connection
+                if (ws) {
+                    ws.close();
+                }
+                // Reload the page to get fresh WebSocket connection and trigger campaign
+                window.location.reload();
+            } else {
+                const error = await response.json();
+                alert(error.detail || 'Failed to rerun campaign');
+                setRerunning(false);
+            }
+        } catch (error) {
+            console.error('Error rerunning campaign:', error);
+            setRerunning(false);
+        }
+    };
+
     if (loading) return <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center">Loading...</div>;
     if (!data) return <div className="min-h-screen bg-[#030303] text-white flex items-center justify-center">Campaign not found</div>;
 
@@ -112,6 +234,27 @@ export default function CampaignDetails() {
                         <p className="text-white/40 text-sm">ID: {campaignId}</p>
                     </div>
                     <div className="ml-auto flex items-center gap-4">
+                        {/* Edit Button */}
+                        <button
+                            onClick={openEditModal}
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors font-medium text-sm"
+                        >
+                            <Edit3 className="w-4 h-4" />
+                            Edit
+                        </button>
+
+                        {/* Rerun Button */}
+                        {(data.campaign.status === 'completed' || data.campaign.status === 'stopped') && (
+                            <button
+                                onClick={handleRerunCampaign}
+                                disabled={rerunning}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors font-medium text-sm disabled:opacity-50"
+                            >
+                                <RotateCcw className={`w-4 h-4 ${rerunning ? 'animate-spin' : ''}`} />
+                                {rerunning ? 'Starting...' : 'Rerun'}
+                            </button>
+                        )}
+
                         {data.campaign.status === 'running' && (
                             <button
                                 onClick={handleStopCampaign}
@@ -309,47 +452,10 @@ export default function CampaignDetails() {
                                     </div>
                                 </div>
 
-                                <div className="bg-white/5 rounded-xl p-4">
-                                    <h3 className="text-sm font-medium text-white/40 mb-3 uppercase tracking-wider">AI Analysis</h3>
-                                    <div className="mb-4">
-                                        <div className="flex justify-between items-end mb-2">
-                                            <span className="text-sm text-white/60">Match Score</span>
-                                            <span className="text-2xl font-bold text-green-400">{Math.round((selectedLead.ml_score || 0) * 100)}%</span>
-                                        </div>
-                                        <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-green-500"
-                                                style={{ width: `${(selectedLead.ml_score || 0) * 100}%` }}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {selectedLead.score_explanation && (
-                                        <div>
-                                            <p className="text-xs text-white/40 mb-2">Key Factors:</p>
-                                            <ul className="space-y-1">
-                                                {Array.isArray(selectedLead.score_explanation) ? (
-                                                    selectedLead.score_explanation.map((factor, i) => (
-                                                        <li key={i} className="text-sm text-white/80 flex items-start gap-2">
-                                                            <span className="text-green-400 mt-1">•</span>
-                                                            {typeof factor === 'object' ? (
-                                                                <span>
-                                                                    <span className="font-medium text-white/90">{factor.name || factor.factor}</span>
-                                                                    {factor.value && <span className="text-white/50 mx-1">- {factor.value}</span>}
-                                                                    {factor.impact && <span className={`text-xs px-1 rounded ${factor.impact === 'High' ? 'bg-green-500/20 text-green-400' : 'bg-white/10 text-white/60'}`}>{factor.impact}</span>}
-                                                                </span>
-                                                            ) : (
-                                                                factor
-                                                            )}
-                                                        </li>
-                                                    ))
-                                                ) : (
-                                                    <li className="text-sm text-white/80">{selectedLead.score_explanation}</li>
-                                                )}
-                                            </ul>
-                                        </div>
-                                    )}
-                                </div>
+                                {/* ML Score Explanation - Using dedicated component */}
+                                {selectedLead.ml_score && (
+                                    <MLScoreExplanation lead={selectedLead} />
+                                )}
                             </div>
 
                             {selectedLead.description && (
@@ -358,6 +464,123 @@ export default function CampaignDetails() {
                                     <p className="text-white/70 text-sm leading-relaxed">{selectedLead.description}</p>
                                 </div>
                             )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Edit Campaign Modal */}
+            <AnimatePresence>
+                {showEditModal && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+                        onClick={() => setShowEditModal(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="flex justify-between items-start mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-3 rounded-full bg-indigo-500/10 text-indigo-400">
+                                        <Edit3 className="w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-bold text-white">Edit Campaign</h2>
+                                        <p className="text-white/40 text-sm">Modify campaign settings</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowEditModal(false)}
+                                    className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleSaveEdit} className="space-y-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-white/60 mb-2">Campaign Name</label>
+                                    <input
+                                        type="text"
+                                        value={editForm.name}
+                                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                        className="w-full bg-white/[0.05] border border-white/[0.1] rounded-lg px-4 py-3 text-white focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all outline-none"
+                                        placeholder="e.g., Q4 SaaS Outreach"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-white/60 mb-2">Product Name</label>
+                                    <input
+                                        type="text"
+                                        value={editForm.product_name}
+                                        onChange={(e) => setEditForm({ ...editForm, product_name: e.target.value })}
+                                        className="w-full bg-white/[0.05] border border-white/[0.1] rounded-lg px-4 py-3 text-white focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all outline-none"
+                                        placeholder="e.g., SalesAI Pro"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-white/60 mb-2">Product Description</label>
+                                    <textarea
+                                        value={editForm.product_description}
+                                        onChange={(e) => setEditForm({ ...editForm, product_description: e.target.value })}
+                                        className="w-full bg-white/[0.05] border border-white/[0.1] rounded-lg px-4 py-3 text-white focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all outline-none h-32"
+                                        placeholder="Describe your product's key features and value proposition..."
+                                        required
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/60 mb-2">Target Industry</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.target_industry}
+                                            onChange={(e) => setEditForm({ ...editForm, target_industry: e.target.value })}
+                                            className="w-full bg-white/[0.05] border border-white/[0.1] rounded-lg px-4 py-3 text-white focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all outline-none"
+                                            placeholder="e.g., Fintech"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-white/60 mb-2">Target Audience</label>
+                                        <input
+                                            type="text"
+                                            value={editForm.target_audience}
+                                            onChange={(e) => setEditForm({ ...editForm, target_audience: e.target.value })}
+                                            className="w-full bg-white/[0.05] border border-white/[0.1] rounded-lg px-4 py-3 text-white focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all outline-none"
+                                            placeholder="e.g., CTOs, VPs of Sales"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEditModal(false)}
+                                        className="flex-1 px-6 py-3 rounded-xl bg-white/5 text-white/60 hover:bg-white/10 transition-colors font-medium"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={saving}
+                                        className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-indigo-500 text-white hover:bg-indigo-600 transition-colors font-medium disabled:opacity-50"
+                                    >
+                                        <Save className="w-4 h-4" />
+                                        {saving ? 'Saving...' : 'Save Changes'}
+                                    </button>
+                                </div>
+                            </form>
                         </motion.div>
                     </motion.div>
                 )}

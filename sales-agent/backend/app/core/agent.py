@@ -1,5 +1,7 @@
 from typing import Dict, Callable, List
 import asyncio
+import traceback
+from ..config import settings  # Import settings for ENV flag
 from ..ml.lead_scorer import MLLeadScorer
 from ..ml.embeddings import EmbeddingService
 from ..ml.response_classifier import ResponseClassifier
@@ -11,13 +13,28 @@ from ..services.email_service import EmailService
 class AutonomousAgent:
     """
     Main agent that orchestrates the entire sales pipeline
+    Delegates to LangGraph agent when USE_LANGGRAPH=true in .env
     """
     
     def __init__(self, campaign: Dict, emit_update: Callable):
         self.campaign = campaign
         self.emit = emit_update
         
-        # Initialize all services
+        # Check if LangGraph mode is enabled via ENV flag
+        self.use_langgraph = settings.USE_LANGGRAPH
+        
+        # If LangGraph enabled, initialize LangGraph agent
+        if self.use_langgraph:
+            try:
+                from .langgraph_agent import LangGraphAgent
+                self.graph_agent = LangGraphAgent(campaign, emit_update)
+                print("✅ LangGraph agent initialized")
+            except Exception as e:
+                print(f"⚠️ LangGraph not available: {e}. Falling back to standard agent.")
+                traceback.print_exc()
+                self.use_langgraph = False
+        
+        # Initialize all services (used by both standard and LangGraph modes)
         self.gemini = GeminiService()
         self.search_service = SearchService()
         self.scraper = ScraperService()
@@ -50,6 +67,12 @@ class AutonomousAgent:
     async def run(self):
         """Execute the full autonomous pipeline"""
         
+        # ENV FLAG: Delegate to LangGraph agent if enabled
+        if self.use_langgraph and hasattr(self, 'graph_agent'):
+            await self.emit("🌐 Using LangGraph workflow (ENV flag enabled)")
+            return await self.graph_agent.run()
+        
+        # EXISTING CODE: Standard linear pipeline (unchanged)
         try:
             # Check if stopped at start
             if self.check_if_stopped():

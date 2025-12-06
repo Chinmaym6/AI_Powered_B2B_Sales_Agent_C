@@ -1,6 +1,5 @@
 import asyncio
 import re
-import random
 from typing import Dict, Optional, List
 from urllib.parse import urlparse, urljoin
 import requests
@@ -11,84 +10,11 @@ class ScraperService:
     """Advanced web scraping service for company data with dual-strategy approach"""
     
     def __init__(self):
-        # Rotate between multiple user agents to avoid bot detection
-        self.user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15'
-        ]
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
         self.timeout = 15000  # 15 seconds for Playwright
         self.request_timeout = 10  # 10 seconds for requests
-    
-    def _get_headers(self):
-        """Get headers with random user agent"""
-        return {
-            'User-Agent': random.choice(self.user_agents),
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1'
-        }
-    
-    
-    async def scrape_company_name_only(self, url: str) -> Optional[str]:
-        """Lightweight scrape to extract ONLY company name for early filtering"""
-        try:
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-            
-            response = requests.get(url, headers=self._get_headers(), timeout=5, allow_redirects=True)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'lxml')
-            
-            # Extract from meta tags
-            og_title = soup.find('meta', property='og:site_name')
-            if og_title and og_title.get('content'):
-                return og_title['content']
-            
-            # Extract from title tag
-            title = soup.find('title')
-            if title:
-                title_text = title.get_text().strip()
-                # Remove separators and take first part
-                for sep in [' | ', ' - ', ' – ']:
-                    if sep in title_text:
-                        return title_text.split(sep)[0].strip()
-                return title_text
-            
-            # Fallback: domain name
-            domain = urlparse(url).netloc.replace('www.', '')
-            return domain.split('.')[0].title()
-            
-        except Exception as e:
-            # Fallback to domain
-            from urllib.parse import urlparse
-            domain = urlparse(url).netloc.replace('www.', '')
-            return domain.split('.')[0].title()
-    
-    def validate_company_name(self, name: str) -> bool:
-        """Validate if company name is legitimate"""
-        if not name or len(name) < 2:
-            return False
-        
-        name_lower = name.lower()
-        
-        # Reject generic/invalid names
-        invalid_names = [
-            'home', 'index', 'page', 'welcome', 'blog',
-            'the', 'and', 'or',
-            'linkedin', 'facebook', 'twitter',
-            'example', 'test', 'demo'
-        ]
-        
-        if name_lower in invalid_names:
-            return False
-        
-        return True
     
     async def scrape_website(self, url: str) -> Optional[Dict]:
         """
@@ -126,7 +52,7 @@ class ScraperService:
         """Fast scraping for static websites using requests + BeautifulSoup"""
         
         try:
-            response = requests.get(url, headers=self._get_headers(), timeout=self.request_timeout, allow_redirects=True)
+            response = requests.get(url, headers=self.headers, timeout=self.request_timeout, allow_redirects=True)
             response.raise_for_status()
             soup = BeautifulSoup(response.text, 'lxml')
             
@@ -150,11 +76,11 @@ class ScraperService:
                 if not data["email"]:
                     data["email"] = self._extract_email(subpages_content, None)
             
-            # GUARANTEED EMAIL: Generate if none found
-            if not data.get('email'):
-                domain = urlparse(url).netloc.replace('www.', '')
-                data['email'] = f'info@{domain}'
-            
+        # GUARANTEED EMAIL: Generate if none found
+        if not data.get('email'):
+            domain = urlparse(url).netloc.replace('www.', '')
+            data['email'] = f'info@{domain}'
+
             return data
             
         except Exception as e:
@@ -168,7 +94,7 @@ class ScraperService:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 context = await browser.new_context(
-                    user_agent=random.choice(self.user_agents),
+                    user_agent=self.headers['User-Agent'],
                     viewport={'width': 1920, 'height': 1080}
                 )
                 page = await context.new_page()
@@ -230,7 +156,7 @@ class ScraperService:
         for link in links_to_visit:
             try:
                 # Use requests for speed on sub-pages
-                resp = requests.get(link, headers=self._get_headers(), timeout=5)
+                resp = requests.get(link, headers=self.headers, timeout=5)
                 if resp.status_code == 200:
                     sub_soup = BeautifulSoup(resp.text, 'lxml')
                     # Extract main text
