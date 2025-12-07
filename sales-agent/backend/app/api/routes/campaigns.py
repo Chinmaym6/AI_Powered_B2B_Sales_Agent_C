@@ -71,11 +71,45 @@ async def run_background_agent(campaign_id: str):
             "product_description": campaign.product_description,
             "target_industry": campaign.target_industry,
             "company_size": campaign.company_size,
-            "target_regions": campaign.target_regions
+            "target_regions": campaign.target_regions,
+            "product_name": campaign.product_name,
+            "target_audience": campaign.target_audience
         }
 
-        # Initialize and run agent
-        agent = AutonomousAgent(campaign_dict, emit_update)
+        # Check if multi-agent mode is enabled
+        import os
+        use_multi_agent = os.getenv("USE_MULTI_AGENT", "true").lower() == "true"
+        
+        if use_multi_agent:
+            # Use Multi-Agent Collaborative System
+            from app.core.multi_agent import create_multi_agent_system
+            from app.services.gemini_service import GeminiService
+            from app.services.scraper_service import ScraperService
+            from app.ml.lead_scorer import MLLeadScorer
+            from app.ml.embeddings import EmbeddingService
+            from app.services.email_service import EmailService
+            
+            await emit_update("🤖 Multi-Agent Mode: ACTIVATED")
+            
+            gemini = GeminiService()
+            scraper = ScraperService()
+            ml_scorer = MLLeadScorer()
+            embeddings = EmbeddingService()
+            email_service = EmailService()
+            
+            agent = create_multi_agent_system(
+                campaign=campaign_dict,
+                gemini_service=gemini,
+                scraper_service=scraper,
+                ml_scorer=ml_scorer,
+                embedding_service=embeddings,
+                email_service=email_service,
+                emit_callback=emit_update
+            )
+        else:
+            # Use standard LangGraph agent
+            agent = AutonomousAgent(campaign_dict, emit_update)
+        
         result = await agent.run()
         
         # Broadcast completion

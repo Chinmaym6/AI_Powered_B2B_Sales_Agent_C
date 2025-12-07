@@ -493,3 +493,85 @@ class ScraperService:
         
         # Capitalize properly
         return name.replace('-', ' ').replace('_', ' ').title()
+    
+    def enrich_lead(self, url: str, company_name: str = "") -> Dict:
+        """
+        Synchronous method to enrich a lead with scraped website data.
+        This is called by ResearcherAgent to get email, description, etc.
+        """
+        from urllib.parse import urlparse
+        
+        result = {
+            'company_name': company_name,
+            'website': url,
+            'description': '',
+            'industry': '',
+            'email': '',
+            'size': '',
+            'linkedin': ''
+        }
+        
+        try:
+            # Normalize URL
+            if not url.startswith(('http://', 'https://')):
+                url = 'https://' + url
+            
+            # Use requests for simple synchronous scraping
+            response = requests.get(
+                url, 
+                headers=self._get_headers(), 
+                timeout=self.request_timeout, 
+                allow_redirects=True
+            )
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'lxml')
+            
+            # Extract all data
+            result['description'] = self._extract_description(soup) or ''
+            result['industry'] = self._extract_industry(soup) or ''
+            result['email'] = self._extract_email(response.text, soup)
+            result['linkedin'] = self._extract_linkedin(soup, url) or ''
+            result['size'] = self._estimate_size(soup) or ''
+            result['decision_makers'] = self._extract_decision_makers(soup)
+            
+            # Also try contact page for email
+            if not result['email']:
+                contact_urls = [
+                    urljoin(url, '/contact'),
+                    urljoin(url, '/contact-us'),
+                    urljoin(url, '/about'),
+                    urljoin(url, '/about-us')
+                ]
+                for contact_url in contact_urls:
+                    try:
+                        resp = requests.get(
+                            contact_url, 
+                            headers=self._get_headers(), 
+                            timeout=5
+                        )
+                        if resp.status_code == 200:
+                            email = self._extract_email(resp.text, BeautifulSoup(resp.text, 'lxml'))
+                            if email:
+                                result['email'] = email
+                                break
+                    except:
+                        continue
+            
+            # GUARANTEED EMAIL: Generate if none found
+            if not result.get('email'):
+                domain = urlparse(url).netloc.replace('www.', '')
+                result['email'] = f'info@{domain}'
+            
+            print(f"✅ Enriched {company_name}: email={result.get('email', 'N/A')}")
+            
+        except Exception as e:
+            print(f"⚠️ Enrichment error for {url}: {e}")
+            # Still provide fallback email
+            try:
+                domain = urlparse(url).netloc.replace('www.', '')
+                result['email'] = f'info@{domain}'
+            except:
+                pass
+        
+        return result

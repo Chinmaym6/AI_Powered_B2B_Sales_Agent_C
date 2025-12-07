@@ -46,6 +46,21 @@ class Settings(BaseSettings):
     # LangGraph Feature Flag (default: false = use existing agent)
     USE_LANGGRAPH: bool = os.getenv("USE_LANGGRAPH", "false").lower() == "true"
     
+    # Multi-Agent Processing Limits (reduce these to stay within API quotas)
+    MAX_LEADS_TO_RESEARCH: int = int(os.getenv("MAX_LEADS_TO_RESEARCH", 20))  # Default 20 leads
+    MAX_LEADS_TO_QUALIFY: int = int(os.getenv("MAX_LEADS_TO_QUALIFY", 30))    # Default 30 leads
+    MAX_EMAILS_TO_GENERATE: int = int(os.getenv("MAX_EMAILS_TO_GENERATE", 10))  # Default 10 emails
+    MAX_SEARCH_RESULTS: int = int(os.getenv("MAX_SEARCH_RESULTS", 8))          # Results per query
+    
+    # Groq Settings (Fast LLM API for Research - saves Gemini quota)
+    # FREE tier: 14,400 requests/day - very fast inference!
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+    GROQ_MODEL: str = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")  # Fast and good
+    GROQ_ENABLED: bool = os.getenv("GROQ_ENABLED", "true").lower() == "true"
+    
+    # Qualification Mode: ml_only (no AI), ml_ai (ML + Gemini), ai_only (Gemini)
+    QUALIFICATION_MODE: str = os.getenv("QUALIFICATION_MODE", "ml_only")
+    
     class Config:
         case_sensitive = True
 
