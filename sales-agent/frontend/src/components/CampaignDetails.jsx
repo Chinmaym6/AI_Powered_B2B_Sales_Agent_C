@@ -395,75 +395,197 @@ export default function CampaignDetails() {
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+                            className="bg-gradient-to-br from-[#0A0A0A] to-[#111111] border border-white/10 rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl"
                             onClick={e => e.stopPropagation()}
                         >
-                            <div className="flex justify-between items-start mb-6">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-white mb-2">{selectedLead.company_name}</h2>
-                                    <div className="flex flex-wrap gap-2 text-sm text-white/60">
-                                        {selectedLead.industry && <span className="bg-white/5 px-2 py-1 rounded">{selectedLead.industry}</span>}
-                                        {selectedLead.location && <span className="bg-white/5 px-2 py-1 rounded">{selectedLead.location}</span>}
-                                        {selectedLead.company_size && <span className="bg-white/5 px-2 py-1 rounded">{selectedLead.company_size} employees</span>}
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setSelectedLead(null)}
-                                    className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                                <div className="space-y-4">
-                                    <div className="bg-white/5 rounded-xl p-4">
-                                        <h3 className="text-sm font-medium text-white/40 mb-3 uppercase tracking-wider">Contact Info</h3>
-                                        <div className="space-y-3">
-                                            {selectedLead.website && (
-                                                <a href={selectedLead.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-400 hover:underline">
-                                                    <Globe className="w-4 h-4" /> Website
-                                                </a>
-                                            )}
-                                            {selectedLead.linkedin_url && (
-                                                <a href={selectedLead.linkedin_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-blue-400 hover:underline">
-                                                    <Linkedin className="w-4 h-4" /> LinkedIn
-                                                </a>
-                                            )}
-                                            {selectedLead.email && (
-                                                <div className="flex items-center gap-2 text-white/80">
-                                                    <Mail className="w-4 h-4 text-white/40" /> {selectedLead.email}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-white/5 rounded-xl p-4">
-                                        <h3 className="text-sm font-medium text-white/40 mb-3 uppercase tracking-wider">Decision Maker</h3>
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 rounded-full bg-white/10">
-                                                <User className="w-5 h-5 text-white/60" />
+                            {/* Header Section */}
+                            <div className="p-6 border-b border-white/10 bg-white/[0.02]">
+                                <div className="flex justify-between items-start">
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="p-2 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20">
+                                                <Globe className="w-6 h-6 text-indigo-400" />
                                             </div>
                                             <div>
-                                                <p className="font-medium text-white">{selectedLead.decision_maker_name || "Unknown"}</p>
-                                                <p className="text-sm text-white/40">{selectedLead.decision_maker_title || "N/A"}</p>
+                                                <h2 className="text-2xl font-bold text-white">{selectedLead.company_name}</h2>
+                                                {selectedLead.website && (
+                                                    <a
+                                                        href={selectedLead.website}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-sm text-blue-400 hover:underline"
+                                                    >
+                                                        {selectedLead.website.replace(/https?:\/\/(www\.)?/, '').split('/')[0]}
+                                                    </a>
+                                                )}
                                             </div>
                                         </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {selectedLead.industry && (
+                                                <span className="flex items-center gap-1 bg-purple-500/20 text-purple-300 px-3 py-1 rounded-full text-sm border border-purple-500/20">
+                                                    🏢 {selectedLead.industry}
+                                                </span>
+                                            )}
+                                            {selectedLead.company_size && (
+                                                <span className="flex items-center gap-1 bg-blue-500/20 text-blue-300 px-3 py-1 rounded-full text-sm border border-blue-500/20">
+                                                    👥 {selectedLead.company_size.toLocaleString()} employees
+                                                </span>
+                                            )}
+                                            {selectedLead.location && (
+                                                <span className="flex items-center gap-1 bg-green-500/20 text-green-300 px-3 py-1 rounded-full text-sm border border-green-500/20">
+                                                    📍 {selectedLead.location}
+                                                </span>
+                                            )}
+                                            {/* Lead Score Badge */}
+                                            <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm font-bold border ${(selectedLead.ml_score || 0) >= 0.8 ? 'bg-green-500/20 text-green-400 border-green-500/30' :
+                                                    (selectedLead.ml_score || 0) >= 0.6 ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
+                                                        (selectedLead.ml_score || 0) >= 0.4 ? 'bg-blue-500/20 text-blue-400 border-blue-500/30' :
+                                                            'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                                                }`}>
+                                                {(selectedLead.ml_score || 0) >= 0.8 ? '🔥' :
+                                                    (selectedLead.ml_score || 0) >= 0.6 ? '🌡️' :
+                                                        (selectedLead.ml_score || 0) >= 0.4 ? '❄️' : '⬜'}
+                                                {' '}{Math.round((selectedLead.ml_score || 0) * 100)}% Match
+                                            </span>
+                                        </div>
                                     </div>
+                                    <button
+                                        onClick={() => setSelectedLead(null)}
+                                        className="p-2 rounded-full bg-white/5 hover:bg-white/10 transition-colors"
+                                    >
+                                        <X className="w-5 h-5" />
+                                    </button>
                                 </div>
-
-                                {/* ML Score Explanation - Using dedicated component */}
-                                {selectedLead.ml_score && (
-                                    <MLScoreExplanation lead={selectedLead} />
-                                )}
                             </div>
 
-                            {selectedLead.description && (
-                                <div className="bg-white/5 rounded-xl p-4">
-                                    <h3 className="text-sm font-medium text-white/40 mb-2 uppercase tracking-wider">Company Description</h3>
-                                    <p className="text-white/70 text-sm leading-relaxed">{selectedLead.description}</p>
+                            {/* Main Content */}
+                            <div className="p-6">
+                                {/* Two Column Layout for Info */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                                    {/* Left Column - Contact & Decision Maker */}
+                                    <div className="space-y-4">
+                                        {/* Contact Information Card */}
+                                        <div className="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+                                            <h3 className="flex items-center gap-2 text-sm font-semibold text-white mb-4">
+                                                <Mail className="w-4 h-4 text-blue-400" />
+                                                Contact Information
+                                            </h3>
+                                            <div className="space-y-3">
+                                                {selectedLead.email ? (
+                                                    <div className="flex items-center justify-between bg-white/[0.03] rounded-lg p-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 rounded-lg bg-green-500/10">
+                                                                <Mail className="w-4 h-4 text-green-400" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-xs text-white/40">Email</p>
+                                                                <p className="text-white font-medium">{selectedLead.email}</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">✓ Found</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-3 bg-white/[0.03] rounded-lg p-3 opacity-50">
+                                                        <div className="p-2 rounded-lg bg-red-500/10">
+                                                            <Mail className="w-4 h-4 text-red-400" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-white/40">Email</p>
+                                                            <p className="text-white/60">Not found</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {selectedLead.website && (
+                                                    <a
+                                                        href={selectedLead.website}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center gap-3 bg-white/[0.03] rounded-lg p-3 hover:bg-white/[0.05] transition-colors"
+                                                    >
+                                                        <div className="p-2 rounded-lg bg-blue-500/10">
+                                                            <Globe className="w-4 h-4 text-blue-400" />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs text-white/40">Website</p>
+                                                            <p className="text-blue-400 font-medium truncate">{selectedLead.website}</p>
+                                                        </div>
+                                                    </a>
+                                                )}
+
+                                                {selectedLead.linkedin_url && (
+                                                    <a
+                                                        href={selectedLead.linkedin_url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center gap-3 bg-white/[0.03] rounded-lg p-3 hover:bg-white/[0.05] transition-colors"
+                                                    >
+                                                        <div className="p-2 rounded-lg bg-blue-600/10">
+                                                            <Linkedin className="w-4 h-4 text-blue-500" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs text-white/40">LinkedIn</p>
+                                                            <p className="text-blue-400 font-medium">View Profile →</p>
+                                                        </div>
+                                                    </a>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Decision Maker Card */}
+                                        <div className="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+                                            <h3 className="flex items-center gap-2 text-sm font-semibold text-white mb-4">
+                                                <User className="w-4 h-4 text-purple-400" />
+                                                Decision Maker
+                                            </h3>
+                                            <div className="flex items-center gap-4 bg-white/[0.03] rounded-lg p-4">
+                                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500/30 to-indigo-500/30 flex items-center justify-center border border-purple-500/20">
+                                                    <User className="w-6 h-6 text-purple-300" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className="font-semibold text-white">
+                                                        {selectedLead.decision_maker_name || "Unknown"}
+                                                    </p>
+                                                    <p className="text-sm text-white/50">
+                                                        {selectedLead.decision_maker_title || "Title not available"}
+                                                    </p>
+                                                </div>
+                                                {selectedLead.decision_maker_name && selectedLead.decision_maker_name !== "Unknown" && (
+                                                    <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded">Identified</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Company Description Card */}
+                                        {selectedLead.description && (
+                                            <div className="bg-white/[0.03] border border-white/10 rounded-xl p-5">
+                                                <h3 className="flex items-center gap-2 text-sm font-semibold text-white mb-3">
+                                                    <MessageSquare className="w-4 h-4 text-yellow-400" />
+                                                    About This Company
+                                                </h3>
+                                                <p className="text-white/70 text-sm leading-relaxed">
+                                                    {selectedLead.description}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Right Column - ML Score */}
+                                    <div>
+                                        {selectedLead.ml_score ? (
+                                            <MLScoreExplanation lead={selectedLead} />
+                                        ) : (
+                                            <div className="bg-white/[0.03] border border-white/10 rounded-xl p-6 h-full flex flex-col items-center justify-center text-center">
+                                                <div className="p-4 rounded-full bg-white/5 mb-4">
+                                                    <Star className="w-8 h-8 text-white/20" />
+                                                </div>
+                                                <p className="text-white/40 text-sm">ML scoring data not available</p>
+                                                <p className="text-white/20 text-xs mt-1">Lead was not processed by the qualifier</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            )}
+                            </div>
                         </motion.div>
                     </motion.div>
                 )}
