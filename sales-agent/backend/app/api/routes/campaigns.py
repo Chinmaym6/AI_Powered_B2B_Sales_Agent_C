@@ -141,8 +141,10 @@ async def create_campaign(
     
     db_campaign = Campaign(
         name=campaign.name,
+        product_name=campaign.product_name,  # Include product_name
         product_description=campaign.product_description,
         target_industry=campaign.target_industry,
+        target_audience=campaign.target_audience,  # Include target_audience
         company_size=campaign.company_size,
         target_regions=campaign.target_regions,
         status="pending"
